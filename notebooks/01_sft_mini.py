@@ -57,11 +57,12 @@ def to_text(row):
     # The translated rows carry stray leading spaces; strip so the template stays clean.
     instruction, extra = row["instruction"].strip(), (row.get("input") or "").strip()
     prompt = instruction + (f"\n\n{extra}" if extra else "")
-    messages = [
-        {"role": "user", "content": prompt},
-        {"role": "assistant", "content": row["output"].strip()},
-    ]
-    return {"text": MD.chat_text(tokenizer, messages, add_generation_prompt=False)}
+    # Build the text as generation prompt + answer + end-of-turn. Rendering the assistant turn
+    # through the template instead would prepend an empty "<think>\n\n</think>\n\n" block that the
+    # generation prompt does not contain, so the SFT model would start every answer with stray
+    # tag tokens (seen as "<tool_call>" in NB4).
+    prompt_text = MD.chat_text(tokenizer, [{"role": "user", "content": prompt}])
+    return {"text": prompt_text + row["output"].strip() + "<|im_end|>\n"}
 
 
 ds = ds.filter(lambda r: bool(r.get("instruction")) and bool(r.get("output")))
