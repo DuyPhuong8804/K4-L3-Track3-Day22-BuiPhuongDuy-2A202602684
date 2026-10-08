@@ -60,9 +60,11 @@ def to_text(row):
     # Build the text as generation prompt + answer + end-of-turn. Rendering the assistant turn
     # through the template instead would prepend an empty "<think>\n\n</think>\n\n" block that the
     # generation prompt does not contain, so the SFT model would start every answer with stray
-    # tag tokens (seen as "<tool_call>" in NB4).
+    # tag tokens (seen as "<tool_call>" in NB4). End on "<|im_end|>" with no trailing newline: SFTTrainer
+    # appends EOS (= <|im_end|>) to text that does not already end with it, and "...\n<|im_end|>" taught
+    # the model to emit <|im_end|> right after a newline, i.e. an empty answer after "assistant\n".
     prompt_text = MD.chat_text(tokenizer, [{"role": "user", "content": prompt}])
-    return {"text": prompt_text + row["output"].strip() + "<|im_end|>\n"}
+    return {"text": prompt_text + row["output"].strip() + "<|im_end|>"}
 
 
 ds = ds.filter(lambda r: bool(r.get("instruction")) and bool(r.get("output")))
