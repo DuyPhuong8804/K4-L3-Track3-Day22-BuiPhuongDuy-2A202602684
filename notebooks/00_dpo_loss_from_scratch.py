@@ -59,8 +59,9 @@ print(f"sum log p = {total.item():.3f}   mean log p = {mean.item():.3f}")
 # %%
 def my_dpo_loss(pc, pr, rc, rr, beta=0.1):
     """pc/pr: policy log-prob chosen/rejected; rc/rr: reference. Trả về loss trung bình."""
-    # TODO: viết bằng torch.nn.functional.logsigmoid
-    return None
+    # reward ngầm = beta * log(pi_theta / pi_ref); margin = reward(chosen) - reward(rejected)
+    margin = beta * ((pc - rc) - (pr - rr))
+    return -torch.nn.functional.logsigmoid(margin).mean()
 
 
 # %%
@@ -112,6 +113,17 @@ scenarios = {
 for name, (pc_, pr_) in scenarios.items():
     loss, cr, rj = M.dpo_loss(pc_, pr_, ref_c, ref_r, beta=1.0)
     print(f"{name:28s} loss {loss.item():.3f}  reward chosen {cr.item():+.1f}  rejected {rj.item():+.1f}")
+
+# %% [markdown]
+# **Trả lời câu hỏi NB0 — vì sao margin tăng được khi log-xác suất của `chosen` giảm?**
+#
+# Loss DPO chỉ phụ thuộc vào *hiệu* `β·[(log π_θ(y_w) − log π_ref(y_w)) − (log π_θ(y_l) − log π_ref(y_l))]`,
+# không phụ thuộc vào từng số hạng riêng. Ở ô trên, kịch bản A (chosen +1, rejected −1) và kịch bản B
+# (chosen −3, rejected −5) cùng có margin = 2 nên cùng loss 0.127, dù ở B log-xác suất của câu `chosen`
+# đã *giảm* 3 nat so với reference. Gradient chỉ đẩy hiệu lên: nếu giảm `rejected` dễ hơn tăng `chosen`
+# (khối xác suất bị rút khỏi cả hai câu và dồn sang các câu khác không nằm trong dữ liệu), mô hình sẽ đi
+# theo hướng đó. Đó là *likelihood displacement*. Chỉ đường `rewards/chosen` riêng lẻ (NB3) mới
+# lộ ra điều này; RPO thêm NLL(chosen) nên phạt B nặng hơn A (2.427 so với 2.027).
 
 # %% [markdown]
 # **RPO** thêm NLL của câu chosen vào loss: kịch bản B bị phạt vì chosen bị đẩy xuống.
